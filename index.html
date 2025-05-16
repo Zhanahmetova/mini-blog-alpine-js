@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alpine.js & TailwindCSS Blog</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    .line-clamp-2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+    .line-clamp-4 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4" x-data="blogApp()" x-init="init()">
+  <div class="max-w-5xl mx-auto">
+    <h1 class="text-3xl font-bold mb-4 text-center text-gray-800">Мини-блог</h1>
+
+    <!-- New Post Button -->
+    <div class="mb-4 text-right">
+      <button @click="openModal()" class="inline-flex items-center px-4 py-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500">Новый пост</button>
+    </div>
+
+    <!-- Filters & Sorting -->
+    <div class="bg-white p-4 rounded-lg shadow-sm mb-6 flex flex-wrap gap-4 items-center">
+      <div class="flex-1 min-w-[200px]">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Поиск</label>
+        <input x-model="search" placeholder="По заголовку..." class="h-10 w-full bg-gray-50 border border-gray-300 rounded-md px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Автор</label>
+        <select x-model="authorFilter" class="h-10 bg-gray-50 border border-gray-300 rounded-md px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+          <option value="">Все авторы</option>
+          <template x-for="author in uniqueAuthors()" :key="author">
+            <option x-text="author" :value="author"></option>
+          </template>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Сортировка</label>
+        <select x-model="sortOption" class="h-10 bg-gray-50 border border-gray-300 rounded-md px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+          <option value="date_desc">Сначала новые</option>
+          <option value="date_asc">Сначала старые</option>
+          <option value="likes_desc">Лайки по убыванию</option>
+          <option value="likes_asc">Лайки по возрастанию</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Modal -->
+    <div x-show="showModal" class="fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center">
+      <div @click.away="closeModal()" class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+        <h2 class="text-xl font-semibold mb-4 text-gray-800">Создать пост</h2>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Название</label>
+            <input x-model="newPost.title" type="text" class="h-10 w-full bg-gray-50 border border-gray-300 rounded-md px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+            <p x-show="errors.title" class="text-red-500 text-sm mt-1" x-text="errors.title"></p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Описание</label>
+            <textarea x-model="newPost.description" class="h-24 w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+            <p x-show="errors.description" class="text-red-500 text-sm mt-1" x-text="errors.description"></p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Автор</label>
+            <input x-model="newPost.author_name" type="text" class="h-10 w-full bg-gray-50 border border-gray-300 rounded-md px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+            <p x-show="errors.author_name" class="text-red-500 text-sm mt-1" x-text="errors.author_name"></p>
+          </div>
+        </div>
+        <div class="mt-6 flex justify-end space-x-2">
+          <button @click="closeModal()" class="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100 focus:outline-none">Отмена</button>
+          <button @click="addPost()" class="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Posts Grid -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      <template x-for="post in sortedFilteredPosts()" :key="post.id">
+        <div
+          x-show="!post.removing"
+          x-transition:enter="transition ease-out duration-300"
+          x-transition:enter-start="opacity-0 transform scale-95"
+          x-transition:enter-end="opacity-100 transform scale-100"
+          x-transition:leave="transition ease-in duration-200"
+          x-transition:leave-start="opacity-100 transform scale-100"
+          x-transition:leave-end="opacity-0 transform scale-90"
+          class="bg-white p-4 rounded-lg shadow flex flex-col"
+        >
+          <div class="flex justify-between text-sm text-gray-500 mb-2">
+            <span x-text="post.author_name"></span>
+            <span x-text="formatDate(post.created_at)"></span>
+          </div>
+          <h2 class="text-xl font-semibold mb-2 line-clamp-2 text-gray-800" x-text="post.title"></h2>
+          <p class="flex-1 mb-2 line-clamp-4 text-gray-600" x-text="post.description"></p>
+          <div class="flex justify-between items-center mt-auto">
+            <button @click="like(post)" class="flex items-center space-x-1 text-red-500 focus:outline-none">
+              ❤️ <span x-text="post.likes_count"></span>
+            </button>
+            <button @click="remove(post)" class="text-gray-500 hover:text-red-600 focus:outline-none">Удалить</button>
+          </div>
+        </div>
+      </template>
+      <template x-if="sortedFilteredPosts().length === 0">
+        <p class="col-span-full text-center text-gray-500">Постов не найдено.</p>
+      </template>
+    </div>
+  </div>
+
+  <script>
+    function blogApp() {
+      return {
+        posts: [],
+        search: '',
+        authorFilter: '',
+        sortOption: 'date_desc',
+        showModal: false,
+        newPost: { title: '', description: '', author_name: '' },
+        errors: {},
+        months: ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'],
+        init() {
+          const stored = localStorage.getItem('blog-posts');
+          this.posts = stored ? JSON.parse(stored) : [];
+        },
+        persist() {
+          localStorage.setItem('blog-posts', JSON.stringify(this.posts));
+        },
+        uniqueAuthors() {
+          return [...new Set(this.posts.map(p => p.author_name))];
+        },
+        sortedFilteredPosts() {
+          let result = this.posts
+            .filter(p => p.title.toLowerCase().includes(this.search.toLowerCase()))
+            .filter(p => this.authorFilter ? p.author_name === this.authorFilter : true);
+          const [key, dir] = this.sortOption.split('_');
+          result.sort((a, b) => {
+            let cmp = key === 'likes' ? a.likes_count - b.likes_count : a.created_at - b.created_at;
+            return dir === 'asc' ? cmp : -cmp;
+          });
+          return result;
+        },
+        formatDate(ts) {
+          const d = new Date(ts);
+          const hh = String(d.getHours()).padStart(2,'0');
+          const mm = String(d.getMinutes()).padStart(2,'0');
+          const dd = d.getDate();
+          const mon = this.months[d.getMonth()];
+          const year = d.getFullYear();
+          const nowYear = new Date().getFullYear();
+          const yearPart = year === nowYear ? '' : ` ${year}`;
+          return `${hh}:${mm}, ${dd} ${mon}${yearPart}`;
+        },
+        openModal() {
+          this.showModal = true;
+          this.newPost = { title: '', description: '', author_name: '' };
+          this.errors = {};
+        },
+        closeModal() {
+          this.showModal = false;
+        },
+        addPost() {
+          this.errors = {};
+          if (!this.newPost.title || this.newPost.title.length < 5) this.errors.title = 'Минимум 5 символов';
+          if (!this.newPost.description) this.errors.description = 'Описание обязательно';
+          if (!this.newPost.author_name) this.errors.author_name = 'Автор обязателен';
+          if (Object.keys(this.errors).length) return;
+          const id = Date.now();
+          const created_at = Date.now();
+          const post = { ...this.newPost, id, created_at, likes_count: 0, removing: false };
+          this.posts.unshift(post);
+          this.persist();
+          this.closeModal();
+        },
+        like(post) { post.likes_count++; this.persist(); },
+        remove(post) {
+          post.removing = true;
+          setTimeout(() => {
+            this.posts = this.posts.filter(p => p.id !== post.id);
+            this.persist();
+          }, 200);
+        }
+      };
+    }
+  </script>
+</body>
+</html>
+
